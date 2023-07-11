@@ -18,7 +18,17 @@ Use cases:
 
 ## 2. LFU Cache (Least Frequently Used)
 
+![LFU Implementation](LFU.png)
+
 LFU counts how often an item is needed. Those that are used least often are discarded first. This algorithm uses the idea that frequently accessed items will likely be accessed again.
+
+In case of a cache hit
+
+![LFU Cache Hit](LFUCacheHit.png)
+
+In case of a cache miss
+
+![LFU Cache Hit](LFUCacheMiss.png)
 
 Use cases:
 
