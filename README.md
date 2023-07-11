@@ -4,7 +4,11 @@ This document provides an overview of different caching mechanisms and their use
 
 ## 1. LRU Cache (Least Recently Used)
 
+![LRU Implementation](LRUImp.png)
+
 LRU cache discards the least recently used items first when the cache's capacity has been reached. This algorithm uses the idea that the items which have been used recently will likely be used again soon.
+
+![LRU Implementation](LRU.png)
 
 Use cases:
 
