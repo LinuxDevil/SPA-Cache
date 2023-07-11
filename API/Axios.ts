@@ -6,7 +6,6 @@ import axios, { AxiosInstance } from 'axios';
 
 import HttpClient, { IRequestOption } from './IHttpClient';
 import { responseTransformer, errorHandler } from './HttpTransformers.ts';
-import i18n from '../../i18n/i18n';
 
 /**
  * Axios API client
@@ -16,29 +15,39 @@ import i18n from '../../i18n/i18n';
  * @supported Supported browsers for Axios: https://github.com/axios/axios#browser-support
  */
 class Axios implements HttpClient {
-  axiosApi: AxiosInstance = axios.create();
-  domain = new URL(location.href);
-  defaultUrl = `${this.domain.origin}/api/v1/`;
+    axiosApi: AxiosInstance = axios.create();
+    domain = new URL(location.href);
+    defaultUrl = `${this.domain.origin}/api/v1/`;
 
-  public request<Response>(option: IRequestOption): Promise<Response> {
-    const axiosApi: AxiosInstance = axios.create();
+    constructor(private cache: ICache<any>) {}
 
-    axiosApi.interceptors.response.use(responseTransformer);
-    const crfToken = document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement;
-    const headers = {
-      token: crfToken?.content || '',
-      ...option.headers
-    };
+    public async request<Response>(option: IRequestOption): Promise<Response> {
+        const crfToken = document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement;
+        const headers = {
+            token: crfToken?.content || '',
+            ...option.headers
+        };
 
-    return axiosApi({
-      method: option.method,
-      url: this.defaultUrl + option.url,
-      data: option.body,
-      headers
-    })
-      .then((response) => <Response>response)
-      .catch(errorHandler);
-  }
+        const cacheKey = JSON.stringify({ url: this.defaultUrl + option.url, method: option.method, headers, data: option.body });
+
+        const cachedResponse = await this.cache.get(cacheKey);
+        if (cachedResponse !== null) {
+            return cachedResponse;
+        }
+
+        return this.axiosApi({
+            method: option.method,
+            url: this.defaultUrl + option.url,
+            data: option.body,
+            headers
+        })
+            .then((response) => <Response>response)
+            .then(async response => {
+                await this.cache.set(cacheKey, response);
+                return response;
+            })
+            .catch(errorHandler);
+    }
 }
 
 export default Axios;
