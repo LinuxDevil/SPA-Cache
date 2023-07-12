@@ -1,7 +1,5 @@
 # Caching Mechanisms
 
-This document provides an overview of different caching mechanisms and their use-cases.
-
 ## 1. LRU Cache (Least Recently Used)
 
 ![LRU Implementation](LRUImp.png)
