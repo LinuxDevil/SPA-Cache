@@ -33,51 +33,54 @@ class LRUCache<T> implements ICache<T> {
         this.head.next = node;
     }
 
+    private storageSuccess(): void { 
+        // TODO: Implement the success callback
+    }
+
+    private storageError(error: string): void {
+        console.error(error);
+    }
+
     async get(key: string): Promise<T | null> {
         const node = this.cache.get(key);
-        if (node) {
-            this.removeNode(node);
-            this.addToHead(node);
-            return this.storage.get<T>(key);
-        } else {
-            return null;
-        }
+        if (!node) return null;
+        this.removeNode(node);
+        this.addToHead(node);
+        return this.storage.get<T>(key);
     }
 
     async set(key: string, value: T): Promise<void> {
-        const node = this.cache.get(key);
-        if (node) {
-            this.removeNode(node);
-            this.addToHead(node);
-            this.storage.set<T>(key, value, () => {}, () => console.error(`Failed to set key: ${key}`));
-        } else {
+        let node = this.cache.get(key);
+
+        if (!node) {
             if (this.cache.size === this.capacity) {
                 const tailPrev = this.tail.prev;
                 this.removeNode(tailPrev);
                 this.cache.delete(tailPrev.key);
-                this.storage.remove(tailPrev.key, () => {}, () => console.error(`Failed to remove key: ${tailPrev.key}`));
+                this.storage.remove(tailPrev.key, this.storageSuccess, () => this.storageError(`Failed to remove key: ${tailPrev.key}`));
             }
 
-            const newNode = new DoublyLinkedListNode(key);
-            this.cache.set(key, newNode);
-            this.addToHead(newNode);
-            this.storage.set<T>(key, value, () => {}, () => console.error(`Failed to set key: ${key}`));
+            node = new DoublyLinkedListNode(key);
+            this.cache.set(key, node);
         }
+
+        this.removeNode(node);
+        this.addToHead(node);
+        this.storage.set<T>(key, value, this.storageSuccess, () => this.storageError(`Failed to set key: ${key}`));
     }
 
-    remove(key: string): void {
+    async remove(key: string): Promise<void> {
         const node = this.cache.get(key);
-        if (node) {
-            this.removeNode(node);
-            this.cache.delete(key);
-            this.storage.remove(key, () => {}, () => console.error(`Failed to remove key: ${key}`));
-        }
+        if (!node) return;
+        this.removeNode(node);
+        this.cache.delete(key);
+        await this.storage.remove(key, this.storageSuccess, () => this.storageError(`Failed to remove key: ${key}`));
     }
 
-    removeAll(): void {
+    async removeAll(): Promise<void> {
         this.head.next = this.tail;
         this.tail.prev = this.head;
         this.cache.clear();
-        this.storage.removeAll(() => {}, () => console.error("Failed to remove all keys"));
+        await this.storage.removeAll(this.storageSuccess, () => this.storageError("Failed to remove all keys"));
     }
 }

@@ -29,72 +29,79 @@ class LFUCache<T> implements ICache<T> {
         prevNode.next = node;
     }
 
-    private touchNode(node: FrequencyListNode): void {
+    private touchNode(key: string, node: FrequencyListNode): void {
         const nextNode = node.next;
         node.keys.delete(key);
 
-        if (!nextNode || nextNode.frequency !== node.frequency + 1) {
-            const newNode = new FrequencyListNode(node.frequency + 1);
-            newNode.keys.add(key);
-            this.insertNode(newNode, node);
-            this.cache.get(key).node = newNode;
-        } else {
-            nextNode.keys.add(key);
-            this.cache.get(key).node = nextNode;
-        }
+        const targetNode = nextNode && nextNode.frequency === node.frequency + 1 ? nextNode : this.createNode(node.frequency + 1, node);
+        targetNode.keys.add(key);
+        this.cache.get(key).node = targetNode;
 
         if (!node.keys.size) this.removeNode(node);
     }
 
+    private createNode(frequency: number, prevNode: FrequencyListNode): FrequencyListNode {
+        const newNode = new FrequencyListNode(frequency);
+        this.insertNode(newNode, prevNode);
+        return newNode;
+    }
+
+    private storageSuccess(): void { 
+        // TODO: Implement the success callback
+     }
+
+    private storageError(error: string): void {
+        console.error(error);
+    }
+
     async get(key: string): Promise<T | null> {
-        if (!this.cache.has(key)) {
-            return null;
-        } else {
-            const { value, node } = this.cache.get(key);
-            this.touchNode(node);
-            return value;
-        }
+        if (!this.cache.has(key)) return null;
+
+        const { value, node } = this.cache.get(key);
+        this.touchNode(key, node);
+        return value;
     }
 
     async set(key: string, value: T): Promise<void> {
         if (this.cache.size === this.capacity) {
-            const leastFrequentKeys = this.frequencyListHead.keys;
-            const leastFrequentKey = leastFrequentKeys.values().next().value;
-            leastFrequentKeys.delete(leastFrequentKey);
-            if (!leastFrequentKeys.size) this.removeNode(this.frequencyListHead);
-            this.cache.delete(leastFrequentKey);
-            await this.storage.remove(leastFrequentKey, () => {}, () => console.error(`Failed to remove key: ${leastFrequentKey}`));
+            this.removeLeastFrequentKey();
         }
 
-        if (!this.cache.has(key)) {
-            if (!this.frequencyListHead.next || this.frequencyListHead.next.frequency !== 1) {
-                const newNode = new FrequencyListNode(1);
-                newNode.keys.add(key);
-                this.insertNode(newNode, this.frequencyListHead);
-            } else {
-                this.frequencyListHead.next.keys.add(key);
-            }
-            this.cache.set(key, { value, node: this.frequencyListHead.next });
-            await this.storage.set<T>(key, value, () => {}, () => console.error(`Failed to set key: ${key}`));
-        } else {
-            const { node } = this.cache.get(key);
-            this.cache.get(key).value = value;
-            this.touchNode(node);
+        const cacheNode = this.cache.get(key);
+        if (cacheNode) {
+            cacheNode.value = value;
+            this.touchNode(key, cacheNode.node);
+            return;
         }
+
+        const targetNode = this.frequencyListHead.next && this.frequencyListHead.next.frequency === 1 ? this.frequencyListHead.next : this.createNode(1, this.frequencyListHead);
+        targetNode.keys.add(key);
+        this.cache.set(key, { value, node: targetNode });
+        await this.storage.set<T>(key, value, this.storageSuccess, () => this.storageError(`Failed to set key: ${key}`));
     }
 
-    remove(key: string): void {
+    private removeLeastFrequentKey(): void {
+        const leastFrequentKeys = this.frequencyListHead.keys;
+        const leastFrequentKey = leastFrequentKeys.values().next().value;
+        leastFrequentKeys.delete(leastFrequentKey);
+        if (!leastFrequentKeys.size) this.removeNode(this.frequencyListHead);
+        this.cache.delete(leastFrequentKey);
+        this.storage.remove(leastFrequentKey, this.storageSuccess, () => this.storageError(`Failed to remove key: ${leastFrequentKey}`));
+    }
+
+    async remove(key: string): Promise<void> {
         if (!this.cache.has(key)) return;
+
         const { node } = this.cache.get(key);
         node.keys.delete(key);
         if (!node.keys.size) this.removeNode(node);
         this.cache.delete(key);
-        this.storage.remove(key, () => {}, () => console.error(`Failed to remove key: ${key}`));
+        await this.storage.remove(key, this.storageSuccess, () => this.storageError(`Failed to remove key: ${key}`));
     }
 
-    removeAll(): void {
+    async removeAll(): Promise<void> {
         this.cache.clear();
         this.frequencyListHead = new FrequencyListNode(0);
-        this.storage.removeAll(() => {}, () => console.error("Failed to remove all keys"));
+        await this.storage.removeAll(this.storageSuccess, () => this.storageError("Failed to remove all keys"));
     }
 }
